@@ -3,18 +3,17 @@
 #include <time.h>
 
 const int Nmax_Episodes = 400; 
-const int Nmax_Levels = 20; 
 const int Nmax_Seeds = 20; 
 const int Length_max_pattern = 40000; // i.e. 4s at 10kHz
 
-class SynapticBarrages : public DefaultGUIModel
+class SynapticSequences : public DefaultGUIModel
 {
 
   Q_OBJECT
 
 public:
-  SynapticBarrages(void);
-  virtual ~SynapticBarrages(void);
+  SynapticSequences(void);
+  virtual ~SynapticSequences(void);
 
   void execute(void);
   void createGUI(DefaultGUIModel::variable_t*, int);
@@ -38,18 +37,12 @@ private:
   double systime;
   long long count;
   double Te, Ee;
-  double Fe_min, Fe_max;
+  double Fe;
   double Start_Vector[Nmax_Episodes];
   double Stop_Vector[Nmax_Episodes];
-  int iFreq_Vector[Nmax_Episodes];
   int Seed_Vector[Nmax_Episodes];
-  double Patterns[Nmax_Levels][Nmax_Seeds][Length_max_pattern];
-  double dt;
-  double delay;
-  double duration;
-  double deltaF;
-  double random_delay;
-  int Nfreq;
+  double Patterns[Nmax_Seeds][Length_max_pattern];
+  double dt, delay, duration, random_delay;
   int Nseed;
   int step_counter;
   bool stim_on;

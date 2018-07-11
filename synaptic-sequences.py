@@ -30,25 +30,11 @@ def load_data(filename):
     
     data['start_vector'] = np.array(data['start_vector'])
     data['stop_vector'] = np.array(data['stop_vector'])
-    Fe_min, Fe_max, Nfreq = 0, 1., 1
+    
     for key in data['params']:
-        if len(key.split('Fe-min'))>1:
-            Fe_min = data['params'][key]
-        if len(key.split('Fe-max'))>1:
-            Fe_max = data['params'][key]
-        if len(key.split('Increments'))>1:
-            Nfreq = data['params'][key]
         if len(key.split('Duration'))>1:
             data['stim_duration'] = 1e-3*data['params'][key]
             
-    if (Fe_min==0) and (Fe_max==1):
-        print('problem fetching the frequency parameters')
-        
-    # frequency vector
-    if Nfreq>1:
-        data['freq_vector'] = np.array(data['freq_vector'])*(Fe_max-Fe_min)/(Nfreq-1)+Fe_min
-    else:
-        data['freq_vector'] = np.array(data['freq_vector'])+Fe_min
     # seed vector
     data['seed_vector'] = np.array(data['seed_vector'])
         
@@ -65,7 +51,7 @@ def load_data(filename):
 ##################################################################
 
 def compute_network_states_and_responses(data, args,
-                                         keys=['freq_vector', 'seed_vector']):
+                                         keys=['seed_vector']):
 
     for key in keys:
         data[key.upper()] = []
@@ -169,10 +155,10 @@ def make_raw_data_figure(data,
     ax.plot(data['t'][cond], (data[data['LFP']][cond]-LFPmin)/(LFPmax-LFPmin)*(Imax-Imin)+(1.6+Vm_enhancement_factor)*(Imax-Imin)+Imin, color=LFP_color, lw=1)
 
     condD = np.array(data['start_vector'])<args.tzoom[1]
-    for ts, te, fe, ss in zip(data['start_vector'][condD], data['stop_vector'][condD], data['freq_vector'][condD], data['seed_vector'][condD]):
+    for ts, te, ss in zip(data['start_vector'][condD], data['stop_vector'][condD], data['seed_vector'][condD]):
         ax.fill_between([ts, te], Imin*np.ones(2), np.ones(2)*2*(Imax-Imin)+Imin, color=Pink, alpha=0.5, lw=0)
         if args.debug:
-            ax.annotate(r'$\nu_e^{stim}$='+str(int(fe))+'Hz \n seed='+str(int(ss)),  (te, Imax+Imin))
+            ax.annotate('Pattern '+str(int(ss+1)),  (te, Imax+Imin))
                 
                 
     set_plot(ax, [], xlim=[data['t'][cond][0], data['t'][cond][-1]])
@@ -203,17 +189,17 @@ def make_trial_average_figure(data, args):
     # run analysis
     compute_network_states_and_responses(data, args)
 
-    data['freq_levels'] = np.unique(data['FREQ_VECTOR'])
+    data['seed_levels'] = np.unique(data['SEED_VECTOR'])
     
-    fig, AX = figure(figsize=(.2*len(data['freq_levels']),.4),
-                     axes=(2, len(data['freq_levels'])),
+    fig, AX = figure(figsize=(.2*len(data['seed_levels']),.4),
+                     axes=(2, len(data['seed_levels'])),
                      wspace=0.2,
                      left=0.25, top=.8)
     
     number_of_common_trials = 1000
-    for a, f in enumerate(data['freq_levels']):
+    for a, f in enumerate(data['seed_levels']):
         # loop over frequency levels
-        cond = (data['FREQ_VECTOR']==f)
+        cond = (data['SEED_VECTOR']==f)
         for i in range(args.N_state_discretization):
             true_cond = data['cond_state_'+str(i+1)] & cond
             AX[1][a].plot(1e3*data['t_window'],
@@ -225,12 +211,12 @@ def make_trial_average_figure(data, args):
                                   lw=0., color=COLORS[i], alpha=.3)
             # for the raster plot, we want a vcommon trial number
             number_of_common_trials = np.min([number_of_common_trials,\
-                                              len(data['FREQ_VECTOR'][true_cond])])
-            print(len(data['FREQ_VECTOR'][true_cond]))
+                                              len(data['SEED_VECTOR'][true_cond])])
+            print(len(data['SEED_VECTOR'][true_cond]))
 
-    for a, f in enumerate(data['freq_levels']):
-        # loop over frequency levels
-        cond = (data['FREQ_VECTOR']==f)
+    for a, f in enumerate(data['seed_levels']):
+        # loop over seeduency levels
+        cond = (data['SEED_VECTOR']==f)
         for i in range(args.N_state_discretization):
             true_cond = data['cond_state_'+str(i+1)] & cond
             for k, s in enumerate(np.arange(len(true_cond))[true_cond][:number_of_common_trials]):
@@ -243,7 +229,7 @@ def make_trial_average_figure(data, args):
                                   i*(number_of_common_trials+2)*np.ones(2)+number_of_common_trials, 
                                   color=COLORS[i], alpha=.3, lw=0)
                 
-        AX[0][a].set_title(r'$\nu_{e}^{stim}$='+str(int(f))+'Hz')
+        AX[0][a].set_title('Pattern '+str(int(f+1)))
         AX[1][a].plot([0,0], args.Vm_lim, 'w.', ms=1e-8, alpha=0)
         if (a==0):
             AX[0][a].plot(1e3*data['t_window'][0]*np.ones(2),
