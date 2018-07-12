@@ -4,6 +4,31 @@ from data_analysis.IO import rtxi # download data_analysis module at https://bit
 import numpy as np
 from graphs.my_graph import *  # download graphs module at https://bitbucket.org/yzerlaut/graphs
 from data_analysis.manipulation.files import * # download data_analysis module at https://bitbucket.org/yzerlaut/
+from data_analysis.processing.signanalysis import gaussian_smoothing
+
+def spike_train_distance(Pattern1, Pattern2, data,
+                         tau=5e-3):
+    """
+    A similarity coef for spike trains
+    """
+    t = np.arange(int(data['stim_duration']/data['dt']))*data['dt']
+    train1, train2 = 0*t, 0*t
+    for tspike in Pattern1:
+        if (tspike>=0) and (tspike<data['stim_duration']):
+            train1[int(tspike/data['dt'])] = 1
+    for tspike in Pattern2:
+        if (tspike>=0) and (tspike<data['stim_duration']):
+            train2[int(tspike/data['dt'])] = 1
+
+    train1 = gaussian_smoothing(train1, int(tau/data['dt']))
+    train2 = gaussian_smoothing(train2, int(tau/data['dt']))
+    std1, std2 = np.std(train1), np.std(train2)
+    
+    if (std1>0) and (std2>0):
+        # so that corrcoef works
+        return np.corrcoef(train1, train2)[0,1]
+    else:
+        return -1
 
 ##################################################################
 ######## FETCHING DATA ###########################################
@@ -253,50 +278,49 @@ def make_sumup_fig(data, args):
     compute_network_states_and_responses(data, args)
 
     
-    fig, AX = figure(figsize=(.3, .3),
-                     # axes=(2,2),
-                     axes_extents=[[[3,1],[2,1]],[[3,1],[2,1]]],
-                     wspace=100.5, hspace=2.5,
-                     left=0.8, top=.99)
+    fig, AX = figure(figsize=(.2, .3),
+                     axes=(2,1),
+                     # wspace=100.5, hspace=2.5,
+                     left=1.2, top=.99)
 
+    Nseed = len(np.unique(data['SEED_VECTOR']))
     for i in range(args.N_state_discretization):
-        fout, sfout, depol, sdepol, fe = [], [], [], [], []
-        for a, f in enumerate(np.unique(data['FREQ_VECTOR'])):
+        CCVM, CCSPIKES = [], []
+        for a, f in enumerate(np.unique(data['SEED_VECTOR'])):
+            ccVm, ccSpikes = 0, 0
             # loop over frequency levels
-            cond = (data['FREQ_VECTOR']==f)
+            cond = (data['SEED_VECTOR']==f)
             true_cond = data['cond_state_'+str(i+1)] & cond
-
-            fout.append(np.mean(data['Firing_levels_post'][true_cond]-data['Firing_levels_pre'][true_cond]))
-            sfout.append(np.std(data['Firing_levels_post'][true_cond]-data['Firing_levels_pre'][true_cond]))
-            depol.append(np.mean(data['Depol_levels_post'][true_cond]-data['Depol_levels_pre'][true_cond]))
-            sdepol.append(np.std(data['Depol_levels_post'][true_cond]-data['Depol_levels_pre'][true_cond]))
-            fe.append(f)
-
-        gain = np.polyfit(1e-3*np.array(fe), 1e3*np.array(depol),1)
-        AX[0][0].plot(np.array(fe), 1e3*np.array(depol), '-', color=COLORS[i], lw=2)
-        # AX[0][0].plot(np.array(fe), np.polyval(gain, 1e-3*np.array(fe)), '--', color=COLORS[i], lw=1)
-        AX[0][0].fill_between(np.array(fe),
-                              1e3*(np.array(depol)-np.array(sdepol)),
-                              1e3*(np.array(depol)+np.array(sdepol)),
-                              lw=0., color=COLORS[i], alpha=.3)
-        AX[0][1].bar([i], [gain[0]], color=COLORS[i])
+            i_true_cond = np.arange(len(data['SEED_VECTOR']))[true_cond]
+            Ntrials = len(data['SEED_VECTOR'][true_cond])
+            N0, N1 = 0, 0
+            for k in range(Ntrials):
+                for l in range(k+1, Ntrials):
+                    ccVm += np.corrcoef(data['Vm_Responses'][true_cond][k],data['Vm_Responses'][true_cond][l])[0,1]
+                    N0+=1
+                    
+                    Pattern1 = list(data['Spike_Responses'][i_true_cond[k]])
+                    Pattern2 = list(data['Spike_Responses'][i_true_cond[l]])
+                    val = spike_train_distance(Pattern1,Pattern2,data)
+                    if val !=-1:
+                        ccSpikes += val
+                        N1 += 1
+                    # if (len(Pattern1)>0) and (len(Pattern2)>0) and (Pattern1!=Pattern2):
+                    #     N1 += 1
+                    # Pattern1 = list(data['Spike_Responses'][i_true_cond[k]])
+                    # Pattern2 = list(data['Spike_Responses'][i_true_cond[l]])
+                    # ccSpikes += spike_train_distance(Pattern1,Pattern2)
+            CCVM.append(ccVm/N0)
+            CCSPIKES.append(ccSpikes/N1)
         
-        gain = np.polyfit(1e-3*np.array(fe), np.array(fout), 1)
-        AX[1][0].plot(np.array(fe), np.array(fout), '-', color=COLORS[i], lw=2)
-        # AX[1][0].plot(np.array(fe), np.polyval(gain, 1e-3*np.array(fe)), '--', color=COLORS[i], lw=1)
-        AX[1][0].fill_between(np.array(fe), (np.array(fout)-np.array(sfout)),
-                              (np.array(fout)+np.array(sfout)),
-                              lw=0., color=COLORS[i], alpha=.3)
-        AX[1][1].bar([i], [gain[0]], color=COLORS[i])
-
-    AX[0][0].set_title('                                   evoked depolarization')
-    set_plot(AX[0][0], ylabel=r'$\delta V_m$ (mV)', xlabel=r'$\nu_e^{stim}$ (Hz)')
-    AX[1][0].set_title('                                   evoked spiking')
-    set_plot(AX[1][0], xlabel=r'$\nu_e^{stim}$ (Hz)', ylabel=r'$\delta \nu_{out}$ (Hz)')
-    set_plot(AX[0][1], ylabel='gain (mV/kHz)  ',
+        AX[0][0].bar([i], [np.mean(CCVM)], yerr=[np.std(CCVM)], color=COLORS[i])
+        AX[1][0].bar([i], [np.mean(CCSPIKES)], yerr=[np.std(CCSPIKES)],
+                     color=COLORS[i])
+        
+    set_plot(AX[0][0], ylabel='cc-$V_m$ Patterns',
              xticks=range(args.N_state_discretization),
              xticks_labels=['BA', 'IA', 'SA'])
-    set_plot(AX[1][1], ylabel='gain (Hz/kHz)  ',
+    set_plot(AX[1][0], ylabel='cc-Spike Patterns',
              xticks=range(args.N_state_discretization),
              xticks_labels=['BA', 'IA', 'SA'])
     
